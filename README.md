@@ -175,6 +175,68 @@ Three systems are compared under the same injected-conflict conditions:
 
 ---
 
+## Implementation Status
+
+### What Has Been Implemented
+
+#### 1. Conflict Detection Module (`cag_rag/conflict/`)
+- **SemanticFilter** — filters triple pairs using cosine similarity to find candidate conflict pairs (Stage 1)
+- **NLIClassifier** — classifies each candidate pair as contradiction / neutral / entailment using DeBERTa (Stage 2)
+- **ConflictDetector** — orchestrates both stages and outputs `ConflictEdge` objects with conflict type, confidence score, and source provenance
+
+#### 2. Knowledge Graph Construction (`cag_rag/graph/`)
+- **KnowledgeGraphBuilder** — extracts triples from text documents; supports spaCy (fast) and REBEL (higher quality) backends
+- **AugmentedGraphIndex** — builds G' = (V, E ∪ C), storing conflict edges as a separate edge type in a MultiDiGraph with O(1) conflict neighbour lookup
+
+#### 3. Conflict-Aware Retrieval (`cag_rag/retrieval/`)
+- **ConflictAwareRetriever** — selects seed nodes via embedding similarity → BFS subgraph expansion → conflict neighbourhood expansion; returns a `RetrievalResult` containing both facts and conflict contexts
+
+#### 4. Contradiction Injection Tool (`cag_rag/injection/`)
+- **ConflictInjector** — four injection strategies (cross_entity / temporal / numerical / lexical), automatically selects the best available strategy per triple, logs ground-truth labels
+- **match_detected_to_ground_truth()** — computes Precision / Recall / F1 against injected ground truth
+
+#### 5. Generation Module (`cag_rag/generation/`)
+- **OpenAIGenerator** — supports `standard` and `conflict_aware` prompt modes with built-in retry logic
+- **PromptBuilder** — builds structured prompts; conflict-aware mode includes explicit `[CONFLICT]` blocks
+- **Conflict flagging** — detects whether the LLM answer explicitly acknowledges a conflict (Conflict Coverage metric)
+
+#### 6. Baseline Systems (`cag_rag/baselines/`)
+- **StandardRAG** — flat embedding similarity retrieval over raw text passages, no graph structure
+- **StandardGraphRAG** — graph-based retrieval with no conflict edges, standard prompt
+
+#### 7. Data & Evaluation (`cag_rag/data/`, `cag_rag/evaluation/`)
+- **SQuADLoader** — loads SQuAD v1.1 from HuggingFace, grouped by Wikipedia article
+- **run_comparison.py** — end-to-end comparison of all three systems; outputs Conflict Coverage and token cost table
+
+---
+
+### What Has NOT Been Implemented Yet
+
+#### High Priority (needed for April evaluation phase)
+
+| Feature | Description |
+|---|---|
+| **TruthfulRAG baseline** | The most important comparison baseline from the proposal — generation-time conflict resolution via entropy-based filtering. Currently missing. |
+| **Faithfulness Score** | LLM-as-judge evaluation measuring whether answers faithfully represent disagreement rather than silently resolving it. Explicitly required in the proposal. |
+| **FaithEval / MuSiQue / RealtimeQA loaders** | Only SQuAD is supported. The proposal requires four datasets covering logical, compositional, and temporal conflict scenarios. |
+
+#### Medium Priority
+
+| Feature | Description |
+|---|---|
+| **Large-scale evaluation script** | Current runs cover only ~9 queries. Need to scale to hundreds and save results to CSV/JSON for analysis. |
+| **REBEL triple extraction testing** | The backend exists in the code but has not been tested end-to-end. spaCy extractions are lower quality. |
+| **configs/ directory** | The folder exists but is empty. Hyperparameters are currently hardcoded across modules. |
+
+#### Low Priority
+
+| Feature | Description |
+|---|---|
+| **Graph visualization** | Visualize the conflict edge distribution in G' for the final presentation. |
+| **Result caching** | Avoid redundant OpenAI API calls across repeated runs to save cost. |
+
+---
+
 ## Pipeline Architecture
 
 ```
